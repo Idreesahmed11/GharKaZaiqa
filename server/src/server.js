@@ -1,0 +1,33 @@
+import 'dotenv/config';
+import express from 'express';
+import http from 'http';
+import cors from 'cors';
+import { Server } from 'socket.io';
+import { connectDB } from './config/db.js';
+import authRoutes from './routes/auth.js';
+import foodRoutes from './routes/foods.js';
+import orderRoutes from './routes/orders.js';
+import paymentRoutes from './routes/payments.js';
+import { configureChat } from './sockets/chat.js';
+
+const app = express();
+const server = http.createServer(app);
+const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+app.use(cors({ origin: clientUrl, credentials: true }));
+app.use(express.json({ limit: '1mb' }));
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'GharKaZaiqa API' }));
+app.use('/api/auth', authRoutes);
+app.use('/api/foods', foodRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use((req, res) => res.status(404).json({ message: `Route not found: ${req.method} ${req.path}` }));
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  if (err?.name === 'ValidationError') return res.status(400).json({ message: err.message });
+  if (err?.code === 11000) return res.status(409).json({ message: 'A record with this value already exists' });
+  res.status(500).json({ message: 'Server error. Please try again.' });
+});
+const io = new Server(server, { cors: { origin: clientUrl, methods: ['GET', 'POST'] } });
+configureChat(io);
+const port = Number(process.env.PORT || 5000);
+connectDB().then(() => server.listen(port, () => console.log(`GharKaZaiqa API running on ${port}`))).catch(err => { console.error(err); process.exit(1); });
